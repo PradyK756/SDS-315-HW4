@@ -1,0 +1,230 @@
+---
+title: "SDS315 Homework 4 Report"
+author: "Prady Kandi, EID: prk599"
+date: "2025-02-20"
+output:
+  pdf_document:
+    toc: true
+urlcolor: blue
+---
+
+The link to the Github repo containing the R file can be found [here](https://github.com/PradyK756/SDS-315-HW4).
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(mosaic)
+library(mosaicCore)
+library(knitr)
+```
+
+```{r seed, include=FALSE}
+set.seed(683)
+frequency <- read.csv("letter_frequencies.csv")
+```
+
+\newpage
+
+# Problem 1
+
+```{r 1.chug, include=FALSE}
+trading_sim = do(100000)*nflip(n=2021, prob=0.024)
+```
+
+```{r 1.plot, echo=FALSE}
+ggplot(trading_sim) + 
+  geom_histogram(aes(x=nflip), binwidth=1, fill = "darkorange2", color = "darkorange3") + labs(title = "Monte Carlo Simulation of Flagged Trades", x = "Flagged Trades", y = "Frequency")
+```
+```{r 1.results, include=FALSE}
+sum(trading_sim >= 70)
+print(sum(trading_sim >= 70)/100000)
+```
+The null hypothesis is that the flagged trades are not illegal, that is, the flagged trades are simply a random aberration and not a result of malicious intent. To validate the null hypothesis, I used the 70 flagged trades and contrasted them against the total 2021 trades to search for the p value. By utilizing a Monte Carlo simulation with 100000 trials, a p-value of `r sum(trading_sim >= 70)/100000` was obtained. As the p-value is less than 5%, and even less than 1%, we can reject the null hypothesis and conclude that there likely were illegal trades happening at Iron Bank.
+
+# Problem 2
+
+```{r 2.chug, include=FALSE}
+gourmet_sim = do(100000)*nflip(n=50, prob=0.03)
+```
+
+```{r 2.graph, echo=FALSE}
+ggplot(gourmet_sim) + 
+  geom_histogram(aes(x=nflip), binwidth=1, fill = "skyblue", color = "lightblue") + labs(title = "Monte Carlo Simulation of Health Inspections", x = "Health Violations", y = "Frequency")
+```
+In this problem, the null hypothesis is that Gourmet Bites' high rate of health code violations is not due to faulty restaurant upkeep, but rather due to bad luck and random chance. To test this hypothesis, I used a Monte Carlo simulation run 100000 times, with a baseline of 50 tests and 3% odds of a faulty test. Running this test yields the p-value of `r sum(gourmet_sim >= 8)/100000`. As this result is less than even .1%, the null hypothesis can be discarded. It can be concluded that Gourmet Bites high rates of health code violations is not due to chance, and that the restaurant should be investigated.
+
+
+```{r 2.result, include = FALSE}
+sum(gourmet_sim >= 8)
+```
+# Problem 3
+
+```{r 3.grind, function, result, include = FALSE}
+
+stan_dist = c(Group1 = 0.30, Group2 = 0.25, Group3 = 0.20, Group4 = 0.15, Group5 = 0.10)
+observed_data =  c(Group1 = 85, Group2 = 56, Group3 = 59, Group4 = 27, Group5 = 13)
+sum(observed_data)
+
+tibble(observed = observed_data, expected = stan_dist*240)
+
+
+num_jurors = 240  
+simulated_counts = rmultinom(1, num_jurors, stan_dist)
+
+
+
+simulated_counts - num_jurors*stan_dist
+
+
+
+chi_squared_statistic = function(observed, expected) {
+  sum((observed - expected)^2 / expected)
+}
+
+chi2 = chi_squared_statistic(simulated_counts, num_jurors*stan_dist)
+
+
+num_simulations = 100000
+chi2_sim = do(num_simulations)*{
+  simulated_counts = rmultinom(1, num_jurors, stan_dist)
+  this_chi2 = chi_squared_statistic(simulated_counts, num_jurors*stan_dist)
+  c(chi2 = this_chi2)
+}
+
+my_chi2 = chi_squared_statistic(observed_data, num_jurors*stan_dist)
+
+```
+
+```{r 3.graph, echo = FALSE}
+ggplot(chi2_sim) + 
+  geom_histogram(aes(x=chi2), binwidth = 1, fill = "green2", color = "green4") + labs(title = "Distribution of Chi-Squared Scores", x = "Chi-Squared Score", y = "Frequency")
+```
+
+To determine whether this judge showed bias in their jury selection, a chi-squared test was used. The null hypothesis is that the judge is not biased in their selections, and rather, the anomalies are due to chance. First, the expected proportion of ethnic groups was collected, along with the selection data of the judge in question. Then the chi-squared test was carried out. The sums of the square of the difference between the expected and actual value divided by the expected value was calculated 100000 times in a Monte Carlo simulation, and the resulting distribution was plotted above. Then, the chi-squared score of the judge was calculated and compared with the distribution. This yielded a p-score of `r sum(chi2_sim >= my_chi2) / num_simulations`, which is less than 5 percent. As such, the null hypothesis can be assumed to be false, implying that the judge is racially or ethnically biased in their selections. The judge might believe that certain races are better able to act as jurors, or might be more biased towards their own race, preferring to select people like themselves more. To investigate further, more data could be collected on this specific judge to determine exactly what biases they have. Alternatively, data could be collected on other judges to examine if bias is prevalent between judges when selecting their juries.
+
+\newpage
+
+# Problem 4
+
+```{r 4.setup, include = FALSE}
+sentences <- readLines("brown_sentences.txt")
+```
+
+
+```{r 4.42, include = FALSE}
+clean_text <- gsub("[^A-Za-z]", "", sentences) 
+clean_text <- toupper(clean_text)  
+
+chi42 <- numeric(length(clean_text))
+iteration = 1
+
+for(sentence in clean_text)
+{
+  result = 0
+  
+  temp_frequency <- frequency
+  letter_freqs <- rep(0, 26)
+  characters <- strsplit(sentence, "")[[1]]
+  for (char in characters) 
+  {
+      letter_index <- match(char, LETTERS)
+      letter_freqs[letter_index] <- letter_freqs[letter_index] + 1
+  }
+  temp_frequency <- as.numeric(temp_frequency$Probability)
+  temp_frequency <- temp_frequency * length(characters)
+  
+
+  chi_squared_value = 0
+  for (i in 1:26){
+    chi_squared_value <- chi_squared_value + ((letter_freqs[i] - temp_frequency[i])^2 /   temp_frequency[i])
+  
+}
+  chi42[iteration] = chi_squared_value
+  iteration = iteration + 1
+
+}
+```
+
+```{r 4.dataframe, include = FALSE}
+chi42_df <- data.frame(chi_squared_values = chi42)
+```
+
+```{r 4.2graph, echo = FALSE}
+ggplot(chi42_df) + 
+  geom_histogram(aes(x=chi_squared_values), binwidth = 2, fill = "lightsteelblue", color = "lightsteelblue3") + labs(title = "Distribution of Chi-Squared Scores for Sentences", x = "Chi-Squared Score", y = "Frequency")
+```
+```{r 4.sentenceB, include = FALSE}
+sentences4B <- c(
+  "She opened the book and started to read the first chapter, eagerly anticipating what might come next.",
+  "Despite the heavy rain, they decided to go for a long walk in the park, crossing the main avenue by the fountain in the center.",
+  "The museum’s new exhibit features ancient artifacts from various civilizations around the world.",
+  "He carefully examined the document, looking for any clues that might help solve the mystery.",
+  "The students gathered in the auditorium to listen to the guest speaker’s inspiring lecture.",
+  "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.",
+  "The chef demonstrated how to prepare a delicious meal using only locally sourced ingredients, focusing mainly on some excellent dinner recipes from Spain.",
+  "They watched the sunset from the hilltop, marveling at the beautiful array of colors in the sky.",
+  "The committee reviewed the proposal and provided many points of useful feedback to improve the project’s effectiveness.",
+  "Despite the challenges faced during the project, the team worked tirelessly to ensure its successful completion, resulting in a product that exceeded everyone’s expectations."
+)
+```
+
+
+```{r 4.43, include = FALSE}
+
+clean_text2 <- gsub("[^A-Za-z]", "", sentences4B) 
+clean_text2 <- toupper(clean_text2) 
+
+
+chi43 <- numeric(length(clean_text2))
+iteration = 1
+
+for(sentence in clean_text2)
+{
+  result = 0
+  
+  temp_frequency <- frequency
+  letter_freqs <- rep(0, 26)
+  characters <- strsplit(sentence, "")[[1]]
+  for (char in characters) 
+  {
+      letter_index <- match(char, LETTERS)
+      letter_freqs[letter_index] <- letter_freqs[letter_index] + 1
+  }
+  temp_frequency <- as.numeric(temp_frequency$Probability)
+  temp_frequency <- temp_frequency * length(characters)
+  
+
+  chi_squared_value = 0
+  for (i in 1:26){
+    chi_squared_value <- chi_squared_value + ((letter_freqs[i] - temp_frequency[i])^2 /   temp_frequency[i])
+  
+}
+  chi43[iteration] = chi_squared_value
+  iteration = iteration + 1
+
+}
+```
+
+
+
+
+```{r 4.table, echo = FALSE}
+chi43P <- data.frame(chi_values = numeric(1))
+for (i in 1:length(clean_text2))
+{
+  chi43P[i] <- (sum(chi42 >= chi43[i])/ length(chi42))
+}
+chi43P <- t(chi43P)
+
+# Load knitr package
+rownames(chi43P) <- paste("Sentence", 1:nrow(chi43P))
+colnames(chi43P) <- "P-Value"
+
+# Create the kable for the rotated dataframe
+kable(chi43P, caption = "Sentence P-Values", digits = 3)
+
+```
+Sentence 6 is likely the one that has been produced by an LLM. Its p-score is the lowest, and is below 5%, implying that does not follow the standard distribution for written English sentences. The sentence, "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland", is the LLM generated sentence.
